@@ -1,0 +1,184 @@
+<!doctype html>
+<html class="no-js" lang="">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title></title>
+  <link rel="stylesheet" href="css/style.css">
+  <meta name="description" content="">
+
+  <meta property="og:title" content="">
+  <meta property="og:type" content="">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="">
+  <meta property="og:image:alt" content="">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#fafafa">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/app.js"></script>
+
+</head>
+
+<body>
+<div class="w-screen h-screen px-auto items-center justify-center flex">
+  <div class="relative max-w-[600px] gap-1">
+    <!-- input control -->
+    <div class="flex items-center justify-between flex-col">
+      <div class="flex flex-col mb-5 gap-2 w-full justify-center">
+        <p class="text-2xl font-bold">Gerenciador de Tarefas</p>
+        <div class="flex gap-2">
+          <label for="mode" class="flex flex-col gap-1">
+            <span class="text-gray-700">Modo:</span>
+            <select id="mode"
+                    class="w-[200px] bg-gray-200 text-gray-700 focus:outline-none focus:border-transparent rounded-lg py-2 px-4">
+              <option value="binary">Binary</option>
+              <option value="counting">Counting</option>
+            </select>
+          </label>
+          <label id="quantityWrapper" for="quantity" hidden="hidden" class="flex  flex-col gap-1">
+            <span class="text-gray-700">Quantidade:</span>
+            <input id="quantity"
+                   class="w-[200px] bg-gray-200  text-gray-700 focus:outline-none focus:border-transparent rounded-lg py-2"/>
+          </label>
+        </div>
+      </div>
+      <label for="count" class="flex gap-2 w-full mb-2">
+        <input id="count"
+               value="1"
+               class="w-[400px] bg-gray-200 text-gray-700 focus:outline-none focus:border-transparent rounded-lg py-2 px-4"
+               type="text" placeholder="Quantidade">
+
+        <button id="addTask"
+                class="bg-transparent hover:bg-blue-500 text-blue-700 font-semibold hover:text-white py-2 px-4 border border-blue-500 hover:border-transparent rounded-lg">
+          Adicionar Tarefa
+        </button>
+      </label>
+    </div>
+    <div class="h-[500px] overflow-x-auto overflow-y-auto">
+      <table
+        class="mt-2 w-[600px]  text-sm text-left rtl:text-right text-gray-500 dark:text-gray-400 sm:rounded-lg  shadow-md">
+        <caption>Lista de tarefas</caption>
+        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+        <tr>
+          <th scope="col" class="px-6 py-3">id</th>
+          <th scope="col" class="px-6 py-3">Tarefa</th>
+          <th scope="col" class="px-6 py-3">Estado</th>
+          <th scope="col" class="px-6 py-3">Ações</th>
+        </tr>
+        </thead>
+        <tbody id="tasks">
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import {TaskManager} from "./js/TaskManager.js";
+  import {Task} from "./js/Task.js";
+  import {createId} from "./js/Id.js";
+  import {Semaphore} from "./js/Semaphore.js";
+
+  const semaphore = new Semaphore({mode: 'binary'})
+  const taskManager = new TaskManager(semaphore);
+
+  // render table
+  function createCell(value, className) {
+    const cell = document.createElement("td");
+    cell.innerText = value;
+    cell.className = 'px-6 py-2 whitespace-nowrap' + (className ? ` ${className}` : '');
+    return cell;
+  }
+
+  function createStatusCell(value) {
+    const cell = document.createElement("td");
+    const span = document.createElement("span");
+    span.innerText = value;
+    const color = value === 'running' ? 'bg-blue-100 text-blue-800' : value === 'completed' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-black';
+    span.className = `px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${color}`;
+    cell.appendChild(span);
+    return cell;
+  }
+
+  function render() {
+    const tasks = taskManager.getTasks();
+    const table = document.getElementById("tasks");
+    table.innerHTML = "";
+
+    for (const task of tasks) {
+      const row = document.createElement("tr");
+
+      row.className = 'bg-white border-b'
+
+      row.appendChild(createCell(task.getId()));
+      row.appendChild(createCell(task.getName()));
+      row.appendChild(createStatusCell(task.getStatus()));
+
+      // remove button
+      const button = document.createElement("button");
+      button.innerText = "Remove";
+      button.onclick = () => {
+        taskManager.removeTaskById(task.getId());
+        render();
+      };
+
+      const cell = document.createElement("td");
+
+      cell.appendChild(button);
+      row.appendChild(cell);
+      table.appendChild(row);
+    }
+  }
+
+  document.querySelector("#addTask").addEventListener("click", () => {
+    const count = parseInt(document.querySelector("#count").value);
+
+    if (isNaN(count)) {
+      alert("Invalid count");
+      return;
+    }
+
+    for (let i = 0; i < count; i++) {
+      const id = createId();
+      const task = new Task(id, `Task ${id}`, semaphore, render);
+      taskManager.addTask(task);
+      task.run();
+    }
+
+    render();
+  });
+
+  // change mode
+  document.querySelector("#mode").addEventListener("change", (e) => {
+    semaphore.setMode(e.target.value);
+
+    taskManager.reset()
+
+    if (semaphore.getMode() === 'counting') {
+      semaphore.setCount(2);
+    }
+
+    if (semaphore.getMode() === 'counting') {
+      document.getElementById("quantityWrapper").removeAttribute("hidden");
+    } else {
+      document.getElementById("quantityWrapper").setAttribute("hidden", "hidden");
+    }
+
+    render()
+  });
+
+  // change quantity
+  document.querySelector("#quantity").addEventListener("change", (e) => {
+    taskManager.reset()
+    semaphore.setCount(parseInt(e.target.value));
+    render()
+  });
+
+</script>
+</body>
+</html>
